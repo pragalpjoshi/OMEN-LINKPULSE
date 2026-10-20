@@ -1,13 +1,12 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, TIMESTAMP, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, Boolean, TIMESTAMP, ForeignKey, func
 from sqlalchemy.orm import relationship
 from app.database import Base
-
 
 class ClickEvent(Base):
     __tablename__ = "click_events"
 
     id = Column(Integer, primary_key=True, autoincrement=True, index=True)
-    link_id = Column(BigInteger, ForeignKey("links.id", ondelete="CASCADE"), nullable=False, index=True)
+    link_id = Column(Integer, ForeignKey("links.id", ondelete="CASCADE"), nullable=False, index=True)
     clicked_at = Column(TIMESTAMP, nullable=False, server_default=func.current_timestamp(), index=True)
     referrer = Column(Text, nullable=True)
     user_agent = Column(Text, nullable=True)
