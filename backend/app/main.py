@@ -4,15 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, SessionLocal, engine
 from app.models import Campaign, ClickEvent, Link, LinkTag, Tag, User
-from app.routers import analytics, campaigns, imports, link, qr, redirects
+from app.routers import analytics, auth, campaigns, imports, link, qr, redirects
 from app.routers.link import get_default_owner_id, sync_link_tags
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="OMEN-LINKPULSE API (MySQL Edition)",
-    version="3.0.0",
-    description="Full-stack LinkPulse Engine backed by MySQL",
+    title="OMEN-LINKPULSE API",
+    version="4.0.0",
+    description="Full-Stack URL Shortener, QR Studio, Campaign Manager & Analytics Engine",
 )
 
 app.add_middleware(
@@ -23,6 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(analytics.router)
 app.include_router(link.router)
 app.include_router(campaigns.router)
@@ -39,66 +40,54 @@ def seed_mysql_initial_data():
         if db.query(Link).count() > 0:
             return
 
-        c_techfest = Campaign(
+        c_launch = Campaign(
             owner_id=owner_id,
-            name="TechFest 2026",
-            description="Campus Hackathon Registration, Printed Poster QR Codes & Keynote Links",
+            name="Q4 Product Launch",
+            description="Main website release, social bio links, and printed QR flyers",
         )
-        c_sponsors = Campaign(
+        c_growth = Campaign(
             owner_id=owner_id,
-            name="Sponsor & Partner Outreach",
-            description="Sponsor prospectus and partner onboarding links",
+            name="Newsletter & Social Growth",
+            description="Weekly digest referrals and partner campaigns",
         )
-        db.add_all([c_techfest, c_sponsors])
+        db.add_all([c_launch, c_growth])
         db.flush()
 
         l1 = Link(
             owner_id=owner_id,
-            campaign_id=c_techfest.id,
-            original_url="https://techfest.org/register?event=hackathon2026",
-            short_code="techfest-26",
+            campaign_id=c_launch.id,
+            original_url="https://github.com/features",
+            short_code="launch-26",
             status="active",
             click_limit=1000,
             expires_at=datetime.utcnow() + timedelta(days=45),
-            click_count=6,
+            click_count=5,
         )
         l2 = Link(
             owner_id=owner_id,
-            campaign_id=c_techfest.id,
-            original_url="https://github.com/topics/hackathon-2026",
-            short_code="tf26-poster",
+            campaign_id=c_growth.id,
+            original_url="https://developer.mozilla.org/en-US/",
+            short_code="dev-docs",
             status="active",
             expires_at=datetime.utcnow() + timedelta(days=30),
             click_count=3,
         )
-        l3 = Link(
-            owner_id=owner_id,
-            campaign_id=c_techfest.id,
-            original_url="http://192.168.1.99/free-crypto/login-verify",
-            short_code="tf26-prize-claim",
-            status="disabled",  # Disabled suspicious link with preserved analytics!
-            click_count=2,
-        )
-        db.add_all([l1, l2, l3])
+        db.add_all([l1, l2])
         db.flush()
 
-        sync_link_tags(db, l1, ["techfest2026", "registration", "poster"], owner_id)
-        sync_link_tags(db, l2, ["techfest2026", "qr-poster"], owner_id)
-        sync_link_tags(db, l3, ["quarantined", "suspicious"], owner_id)
+        sync_link_tags(db, l1, ["launch", "marketing", "qr"], owner_id)
+        sync_link_tags(db, l2, ["docs", "newsletter"], owner_id)
 
         now = datetime.utcnow()
         sample_events = [
-            (l1.id, now - timedelta(days=5), "instagram.com", "Mobile", "Safari", "India", False),
-            (l1.id, now - timedelta(days=4), "Direct", "Mobile", "Chrome", "India", False),
-            (l1.id, now - timedelta(days=3), "linkedin.com", "Desktop", "Chrome", "United States", False),
-            (l1.id, now - timedelta(days=2), "whatsapp.com", "Mobile", "Chrome", "India", False),
-            (l1.id, now - timedelta(days=1), "Direct", "Desktop", "Edge", "India", False),
-            (l1.id, now - timedelta(hours=3), "twitter.com", "Mobile", "Safari", "India", False),
-            (l2.id, now - timedelta(days=3), "github.com", "Desktop", "Chrome", "India", False),
+            (l1.id, now - timedelta(days=4), "instagram.com", "Mobile", "Safari", "India", False),
+            (l1.id, now - timedelta(days=3), "Direct", "Mobile", "Chrome", "India", False),
+            (l1.id, now - timedelta(days=2), "linkedin.com", "Desktop", "Chrome", "United States", False),
+            (l1.id, now - timedelta(days=1), "whatsapp.com", "Mobile", "Chrome", "India", False),
+            (l1.id, now - timedelta(hours=3), "Direct", "Desktop", "Edge", "India", False),
+            (l2.id, now - timedelta(days=2), "github.com", "Desktop", "Chrome", "India", False),
             (l2.id, now - timedelta(days=1), "Direct", "Mobile", "Chrome", "Singapore", False),
             (l2.id, now - timedelta(hours=2), "linkedin.com", "Desktop", "Firefox", "Germany", False),
-            (l3.id, now - timedelta(days=2, hours=4), "telegram.org", "Mobile", "Chrome", "Russia", True),
-            (l3.id, now - timedelta(days=2, hours=1), "Direct", "Desktop", "Chrome", "India", False),
         ]
         for lid, ts, ref, dev, brw, country, is_bot in sample_events:
             db.add(

@@ -11,7 +11,7 @@ from app.models.campaign import Campaign
 from app.models.link import Link, Tag
 from app.models.user import User
 from app.schemas.link import LinkCreate, LinkUpdate, ALIAS_REGEX
-from app.security import hash_password
+from app.security import hash_password, get_current_user_id
 from app.services.safety_service import analyze_url_safety
 
 router = APIRouter(prefix="/api/links", tags=["Links"])
@@ -23,7 +23,7 @@ def get_default_owner_id(db: Session) -> int:
     user = db.query(User).order_by(User.id.asc()).first()
     if not user:
         user = User(
-            name="Pragalp Joshi",
+            name="Admin User",
             email="admin@linkpulse.dev",
             password_hash=hash_password("admin123"),
             role="admin",
@@ -85,7 +85,7 @@ def serialize_link(link: Link, request: Optional[Request] = None) -> dict:
         "destination_url": link.original_url,
         "short_code": link.short_code,
         "custom_alias": link.short_code,
-        "short_url": f"{base_url}/r/{link.short_code}",
+        "short_url": f"{base_url}/s/{link.short_code}",
         "campaign_id": link.campaign_id,
         "campaign_name": link.campaign.name if link.campaign else None,
         "status": link.status,
@@ -117,7 +117,7 @@ def check_alias_availability(
         }
     existing = db.query(Link).filter(Link.short_code == alias).first()
     if existing:
-        return {"available": False, "reason": "This short code / alias is already taken."}
+        return {"available": False, "reason": "This custom alias is already taken."}
     return {"available": True, "reason": "Alias is available."}
 
 
@@ -172,8 +172,11 @@ def create_link(
     payload: LinkCreate,
     request: Request,
     db: Session = Depends(get_db),
+    current_user_id: int = Depends(get_current_user_id),
 ):
-    owner_id = get_default_owner_id(db)
+    default_owner = get_default_owner_id(db)
+    user_exists = db.query(User).filter(User.id == current_user_id).first()
+    owner_id = user_exists.id if user_exists else default_owner
 
     if payload.expires_at:
         now = datetime.utcnow()
@@ -194,7 +197,7 @@ def create_link(
     if payload.campaign_id is not None:
         campaign = db.query(Campaign).filter(Campaign.id == payload.campaign_id).first()
         if not campaign:
-            raise HTTPException(status_code=404, detail="Selected campaign does not exist.")
+            payload.campaign_id = None
 
     pw_hash = hash_password(payload.password) if payload.password else None
 
@@ -226,10 +229,6 @@ def toggle_link_status(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """
-    Disables or re-enables a suspicious link by toggling `links.status`
-    between 'active' and 'disabled' WITHOUT deleting its historical analytics.
-    """
     link = db.query(Link).filter(Link.id == link_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Link not found.")

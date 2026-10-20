@@ -12,7 +12,10 @@ from app.security import verify_password
 
 router = APIRouter(tags=["Redirects"])
 
-BOT_SIGNATURES = ("bot", "crawler", "spider", "curl", "wget", "python-requests", "headless", "facebookexternalhit")
+BOT_SIGNATURES = (
+    "bot", "crawler", "spider", "curl", "wget",
+    "python-requests", "headless", "facebookexternalhit",
+)
 
 
 def parse_user_agent(ua_string: str):
@@ -111,12 +114,11 @@ def render_status_page(title: str, subtitle: str, badge_color: str = "#ef4444") 
     """
 
 
-@router.get("/r/{short_code}")
-def redirect_short_link(
+def _handle_redirect(
     short_code: str,
     request: Request,
-    password: Optional[str] = Query(default=None),
-    db: Session = Depends(get_db),
+    password: Optional[str],
+    db: Session,
 ):
     link = db.query(Link).filter(Link.short_code == short_code).first()
     if not link:
@@ -125,8 +127,8 @@ def redirect_short_link(
     if link.status != "active":
         return HTMLResponse(
             render_status_page(
-                "Link Disabled by Security / Admin",
-                "This short link has been disabled. All historical analytics remain preserved in the LinkPulse dashboard.",
+                "Link Disabled by Owner / Security",
+                "This short link is currently disabled. Historical analytics remain preserved in the dashboard.",
                 "#ef4444",
             ),
             status_code=410,
@@ -146,7 +148,7 @@ def redirect_short_link(
         return HTMLResponse(
             render_status_page(
                 "Maximum Click Limit Reached",
-                f"This link reached its cap of {link.click_limit} visits.",
+                f"This link reached its maximum limit of {link.click_limit} visits.",
                 "#f59e0b",
             ),
             status_code=410,
@@ -169,7 +171,7 @@ def redirect_short_link(
                 </style>
             </head>
             <body>
-                <form class="card" method="GET" action="/r/{short_code}">
+                <form class="card" method="GET" action="/s/{short_code}">
                     <h3 style="margin-top:0">🔒 Password Protected Link</h3>
                     <p style="color:#94a3b8;font-size:0.9rem">Enter the password to unlock <strong>/{short_code}</strong>.</p>
                     {"<p class='err'>Invalid password. Please try again.</p>" if password else ""}
@@ -183,6 +185,26 @@ def redirect_short_link(
 
     record_click(db, link, request)
     return RedirectResponse(url=link.original_url, status_code=307)
+
+
+@router.get("/s/{short_code}")
+def redirect_short_s(
+    short_code: str,
+    request: Request,
+    password: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    return _handle_redirect(short_code, request, password, db)
+
+
+@router.get("/r/{short_code}")
+def redirect_short_r(
+    short_code: str,
+    request: Request,
+    password: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    return _handle_redirect(short_code, request, password, db)
 
 
 @router.post("/api/links/{link_id}/simulate-click")
