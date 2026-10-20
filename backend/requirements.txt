@@ -6,3 +6,4 @@ cryptography
 python-dotenv
 qrcode
 pillow
+python-multipart
