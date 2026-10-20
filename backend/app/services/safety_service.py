@@ -1,39 +1,48 @@
-from urllib.parse import urlsplit
-import ipaddress
-from fastapi import HTTPException
-def validate_destination_url(value: str) -> str:
-    """Accept public HTTP(S) destinations and reject obvious unsafe targets."""
-    raw = value.strip()
-    try:
-        parsed = urlsplit(raw)
-        if parsed.scheme.lower() not in {"http", "https"}:
-            raise ValueError("Only HTTP and HTTPS URLs are supported.")
-        host = parsed.hostname
-        if not host:
-            raise ValueError("A hostname is required.")
-        if parsed.username is not None or parsed.password is not None:
-            raise ValueError("URLs containing embedded credentials are not allowed.")
-        host = host.rstrip(".").lower()
-        if (
-            host == "localhost"
-            or host.endswith(".localhost")
-            or host.endswith(".local")
-        ):
-            raise ValueError("Local hostnames are not allowed.")
-        try:
-            address = ipaddress.ip_address(host)
-        except ValueError:
-            if not host or any(char.isspace() for char in host):
-                raise ValueError("Invalid hostname.")
-        else:
-            if not address.is_global:
-                raise ValueError("Private or reserved IP destinations are not allowed.")
-        port = parsed.port
-        if port is not None and not 1 <= port <= 65535:
-            raise ValueError("Invalid port.")
-    except (ValueError, UnicodeError) as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Invalid destination URL: {exc}",
-        ) from exc
-    return raw
+import re
+from urllib.parse import urlparse
+
+SUSPICIOUS_KEYWORDS = {
+    "login-verify", "account-update", "free-crypto", "airdrop-claim",
+    "wallet-connect", "bank-secure", "password-reset-urgent", "verify-id",
+}
+RISKY_TLDS = {".zip", ".mov", ".tk", ".ml", ".ga", ".cf", ".gq", ".top", ".xyz"}
+IP_HOST_REGEX = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+
+
+def analyze_url_safety(url: str) -> dict:
+    if not url:
+        return {"is_flagged": False, "risk_score": 0, "flag_reason": None}
+
+    parsed = urlparse(url.strip())
+    host = (parsed.hostname or "").lower()
+    full_lower = url.lower()
+
+    reasons = []
+    score = 0
+
+    if IP_HOST_REGEX.match(host):
+        score += 65
+        reasons.append("Uses raw IP address instead of a domain name")
+
+    if "xn--" in host:
+        score += 55
+        reasons.append("Contains punycode/homograph domain characters")
+
+    if any(host.endswith(tld) for tld in RISKY_TLDS):
+        score += 40
+        reasons.append("Uses a high-risk top-level domain")
+
+    matched_kw = [kw for kw in SUSPICIOUS_KEYWORDS if kw in full_lower]
+    if matched_kw:
+        score += 50
+        reasons.append(f"Contains suspicious pattern ({matched_kw[0]})")
+
+    if "@" in parsed.netloc:
+        score += 60
+        reasons.append("Contains deceptive '@' credential prefix in URL")
+
+    return {
+        "is_flagged": score >= 40,
+        "risk_score": min(score, 100),
+        "flag_reason": "; ".join(reasons) if reasons else None,
+    }

@@ -1,18 +1,19 @@
-from datetime import datetime
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Column, Integer, BigInteger, String, Text, Boolean, TIMESTAMP, ForeignKey, func
+from sqlalchemy.orm import relationship
 from app.database import Base
+
+
 class ClickEvent(Base):
     __tablename__ = "click_events"
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    link_id: Mapped[int] = mapped_column(Integer, ForeignKey("links.id", ondelete="CASCADE"),
-                                         nullable=False, index=True)
-    clicked_at: Mapped[datetime] = mapped_column(DateTime, nullable=False,
-        server_default=func.current_timestamp(), index=True)
-    referrer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
-    device_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    browser: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    country: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    is_bot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
-    link: Mapped["Link"] = relationship(back_populates="click_events")
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    link_id = Column(BigInteger, ForeignKey("links.id", ondelete="CASCADE"), nullable=False, index=True)
+    clicked_at = Column(TIMESTAMP, nullable=False, server_default=func.current_timestamp(), index=True)
+    referrer = Column(Text, nullable=True)
+    user_agent = Column(Text, nullable=True)
+    device_type = Column(String(30), nullable=True, default="Desktop")
+    browser = Column(String(100), nullable=True, default="Chrome")
+    country = Column(String(100), nullable=True, default="India")
+    is_bot = Column(Boolean, nullable=False, default=False)
+
+    link = relationship("Link", back_populates="click_events")
