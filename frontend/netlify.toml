@@ -3,6 +3,28 @@
   command = "npm run build"
   publish = "dist"
 
+# Proxy API requests to Render
+[[redirects]]
+  from = "/api/*"
+  to = "https://omen-linkpulse.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+# Proxy ultra-short links to Render
+[[redirects]]
+  from = "/s/*"
+  to = "https://omen-linkpulse.onrender.com/s/:splat"
+  status = 200
+  force = true
+
+# Proxy standard short links to Render
+[[redirects]]
+  from = "/r/*"
+  to = "https://omen-linkpulse.onrender.com/r/:splat"
+  status = 200
+  force = true
+
+# React SPA Fallback (Prevents 404s on page refresh)
 [[redirects]]
   from = "/*"
   to = "/index.html"
